@@ -23,6 +23,7 @@ import qualified Data.IntMap as IM
 import qualified Data.Sequence as Seq
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as E
+import qualified Network.Connection as Conn
 
 import Network.AMQP.Protocol
 import Network.AMQP.Types
@@ -266,7 +267,15 @@ openConnection'' connOpts = withSocketsDo $ do
             (\(ex :: CE.SomeException) -> do
                 putStrLn $ "Error connecting to "++show (host, port)++": "++show ex
                 connect rest)
-            (return)
+            (\h -> do
+                ctx <- Conn.initConnectionContext
+                _ <- Conn.connectFromHandle ctx h $ Conn.ConnectionParams
+                              { Conn.connectionHostname  = host
+                              , Conn.connectionPort      = port
+                              , Conn.connectionUseSecure = Just $ Conn.TLSSettingsSimple True False False
+                              , Conn.connectionUseSocks  = Nothing
+                              }
+                return h)
             result
     connect [] = CE.throwIO $ ConnectionClosedException $ "Could not connect to any of the provided brokers: " ++ show (coServers connOpts)
     selectSASLMechanism handle serverMechanisms =
