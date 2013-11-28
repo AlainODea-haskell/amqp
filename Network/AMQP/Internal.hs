@@ -127,7 +127,7 @@ Outgoing Data: Application -> Socket
 -}
 
 data Connection = Connection {
-                    connHandle :: Handle,
+                    connHandle :: Conn.Connection,
                     connChannels :: (MVar (IM.IntMap (Channel, ThreadId))), --open channels (channelID => (Channel, ChannelThread))
                     connMaxFrameSize :: Int, --negotiated maximum frame size
                     connClosed :: MVar (Maybe String),
@@ -189,13 +189,13 @@ openConnection'' :: ConnectionOpts -> IO Connection
 openConnection'' connOpts = withSocketsDo $ do
     handle <- connect $ coServers connOpts
     (maxFrameSize, heartbeatTimeout) <- CE.handle (\(_ :: CE.IOException) -> CE.throwIO $ ConnectionClosedException "Handshake failed. Please check the RabbitMQ logs for more information") $ do
-        BL.hPut handle $ BPut.runPut $ do
-            BPut.putByteString $ BC.pack "AMQP"
-            BPut.putWord8 1
-            BPut.putWord8 1 --TCP/IP
-            BPut.putWord8 0 --Major Version
-            BPut.putWord8 9 --Minor Version
-        hFlush handle
+        Conn.connectionPut handle $ BS.append (BC.pack "AMQP")
+                (BS.pack [
+                          1
+                        , 1 --TCP/IP
+                        , 0 --Major Version
+                        , 9 --Minor Version
+                       ])
 
         -- S: connection.start
         Frame 0 (MethodPayload (Connection_start _ _ _ (LongString serverMechanisms) _)) <- readFrame handle
@@ -269,13 +269,12 @@ openConnection'' connOpts = withSocketsDo $ do
                 connect rest)
             (\h -> do
                 ctx <- Conn.initConnectionContext
-                _ <- Conn.connectFromHandle ctx h $ Conn.ConnectionParams
+                return Conn.connectFromHandle ctx h $ Conn.ConnectionParams
                               { Conn.connectionHostname  = host
                               , Conn.connectionPort      = port
                               , Conn.connectionUseSecure = Just $ Conn.TLSSettingsSimple True False False
                               , Conn.connectionUseSocks  = Nothing
-                              }
-                return h)
+                              })
             result
     connect [] = CE.throwIO $ ConnectionClosedException $ "Could not connect to any of the provided brokers: " ++ show (coServers connOpts)
     selectSASLMechanism handle serverMechanisms =
@@ -310,7 +309,7 @@ openConnection'' connOpts = withSocketsDo $ do
         True))) -- insist; deprecated in 0-9-1
 
     abortHandshake handle msg = do
-        hClose handle
+        Conn.connectionClose handle
         CE.throwIO $ ConnectionClosedException msg
 
     abortIfNothing m handle msg = case m of
@@ -384,13 +383,13 @@ addConnectionClosedHandler conn ifClosed handler = do
             -- otherwise add it to the list
             _ -> modifyMVar_ (connClosedHandlers conn) $ \old -> return $ handler:old
 
-readFrame :: Handle -> IO Frame
+readFrame :: Conn.Connection -> IO Frame
 readFrame handle = do
-    dat <- BL.hGet handle 7
+    dat <- Conn.connectionGet handle 7
     -- NB: userError returns an IOException so it will be catched in 'connectionReceiver'
     when (BL.null dat) $ CE.throwIO $ userError "connection not open"
     let len = fromIntegral $ peekFrameSize dat
-    dat' <- BL.hGet handle (len+1) -- +1 for the terminating 0xCE
+    dat' <- Conn.connectionGet handle (len+1) -- +1 for the terminating 0xCE
     when (BL.null dat') $ CE.throwIO $ userError "connection not open"
     let ret = runGetOrFail get (BL.append dat dat')
     case ret of
@@ -399,10 +398,9 @@ readFrame handle = do
             error $ "readFrame: parser should read " ++ show (len+8) ++ " bytes; but read " ++ show consumedBytes
         Right (_, _, frame) -> return frame
 
-writeFrame :: Handle -> Frame -> IO ()
+writeFrame :: Conn.Connection -> Frame -> IO ()
 writeFrame handle f = do
-    BL.hPut handle . runPut . put $ f
-    hFlush handle
+    Conn.connectionPut handle . runPut . put $ f
 
 ------------------------ CHANNEL -----------------------------
 
