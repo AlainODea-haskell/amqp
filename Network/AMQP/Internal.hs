@@ -237,7 +237,7 @@ openConnection'' connOpts = withSocketsDo $ do
     --spawn the connectionReceiver
     connThread <- forkIO $ CE.finally (connectionReceiver conn) $ do
                 -- try closing socket
-                CE.catch (hClose handle) (\(_ :: CE.SomeException) -> return ())
+                CE.catch (Conn.connectionClose handle) (\(_ :: CE.SomeException) -> return ())
 
                 -- mark as closed
                 modifyMVar_ cClosed $ return . Just . maybe "unknown reason" id
@@ -269,7 +269,7 @@ openConnection'' connOpts = withSocketsDo $ do
                 connect rest)
             (\h -> do
                 ctx <- Conn.initConnectionContext
-                return Conn.connectFromHandle ctx h $ Conn.ConnectionParams
+                Conn.connectFromHandle ctx h $ Conn.ConnectionParams
                               { Conn.connectionHostname  = host
                               , Conn.connectionPort      = port
                               , Conn.connectionUseSecure = Just $ Conn.TLSSettingsSimple True False False
@@ -385,11 +385,13 @@ addConnectionClosedHandler conn ifClosed handler = do
 
 readFrame :: Conn.Connection -> IO Frame
 readFrame handle = do
-    dat <- Conn.connectionGet handle 7
+    strictDat <- Conn.connectionGet handle 7
+    let dat = BL.fromStrict strictDat
     -- NB: userError returns an IOException so it will be catched in 'connectionReceiver'
     when (BL.null dat) $ CE.throwIO $ userError "connection not open"
     let len = fromIntegral $ peekFrameSize dat
-    dat' <- Conn.connectionGet handle (len+1) -- +1 for the terminating 0xCE
+    strictDat' <- Conn.connectionGet handle (len+1) -- +1 for the terminating 0xCE
+    let dat' = BL.fromStrict strictDat'
     when (BL.null dat') $ CE.throwIO $ userError "connection not open"
     let ret = runGetOrFail get (BL.append dat dat')
     case ret of
@@ -400,7 +402,7 @@ readFrame handle = do
 
 writeFrame :: Conn.Connection -> Frame -> IO ()
 writeFrame handle f = do
-    Conn.connectionPut handle . runPut . put $ f
+    Conn.connectionPut handle . BL.toStrict . runPut . put $ f
 
 ------------------------ CHANNEL -----------------------------
 
