@@ -272,7 +272,7 @@ openConnection'' connOpts = withSocketsDo $ do
                 Conn.connectFromHandle ctx h $ Conn.ConnectionParams
                               { Conn.connectionHostname  = host
                               , Conn.connectionPort      = port
-                              , Conn.connectionUseSecure = Just $ Conn.TLSSettingsSimple True False False
+                              , Conn.connectionUseSecure = Nothing --Just $ Conn.TLSSettingsSimple True False False
                               , Conn.connectionUseSocks  = Nothing
                               })
             result
