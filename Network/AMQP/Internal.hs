@@ -149,7 +149,8 @@ data ConnectionOpts = ConnectionOpts {
                             coAuth :: ![SASLMechanism], -- ^ The 'SASLMechanism's to use for authenticating with the broker.
                             coMaxFrameSize :: !(Maybe Word32), -- ^ The maximum frame size to be used. If not specified, no limit is assumed.
                             coHeartbeatDelay :: !(Maybe Word16), -- ^ The delay in seconds, after which the client expects a heartbeat frame from the broker. If 'Nothing', the value suggested by the broker is used. Use @Just 0@ to disable the heartbeat mechnism.
-                            coMaxChannel :: !(Maybe Word16) -- ^ The maximum number of channels the client will use.
+                            coMaxChannel :: !(Maybe Word16), -- ^ The maximum number of channels the client will use.
+                            coUseTLS :: Bool
                         }
 
 -- | A 'SASLMechanism' is described by its name ('saslName'), its initial response ('saslInitialResponse'), and an optional function ('saslChallengeFunc') that
@@ -187,7 +188,10 @@ connectionReceiver conn = do
 -- | Opens a connection to a broker specified by the given 'ConnectionOpts' parameter.
 openConnection'' :: ConnectionOpts -> IO Connection
 openConnection'' connOpts = withSocketsDo $ do
-    handle <- connect $ coServers connOpts
+    let tlsSettings = if coUseTLS connOpts
+                      then Just $ Conn.TLSSettingsSimple True False False
+                      else Nothing
+    handle <- connect tlsSettings $ coServers connOpts
     (maxFrameSize, heartbeatTimeout) <- CE.handle (\(_ :: CE.IOException) -> CE.throwIO $ ConnectionClosedException "Handshake failed. Please check the RabbitMQ logs for more information") $ do
         Conn.connectionPut handle $ BS.append (BC.pack "AMQP")
                 (BS.pack [
@@ -261,22 +265,21 @@ openConnection'' connOpts = withSocketsDo $ do
 
     return conn
   where
-    connect ((host, port) : rest) = do
-        result <- CE.try (connectTo host $ PortNumber port)
+    connect tlsSettings ((host, port) : rest) = do
+        ctx <- Conn.initConnectionContext
+        result <- CE.try (Conn.connectTo ctx $ Conn.ConnectionParams
+                              { Conn.connectionHostname  = host
+                              , Conn.connectionPort      = port
+                              , Conn.connectionUseSecure = tlsSettings
+                              , Conn.connectionUseSocks  = Nothing
+                              })
         either
             (\(ex :: CE.SomeException) -> do
                 putStrLn $ "Error connecting to "++show (host, port)++": "++show ex
-                connect rest)
-            (\h -> do
-                ctx <- Conn.initConnectionContext
-                Conn.connectFromHandle ctx h $ Conn.ConnectionParams
-                              { Conn.connectionHostname  = host
-                              , Conn.connectionPort      = port
-                              , Conn.connectionUseSecure = Nothing --Just $ Conn.TLSSettingsSimple True False False
-                              , Conn.connectionUseSocks  = Nothing
-                              })
+                connect tlsSettings rest)
+            return
             result
-    connect [] = CE.throwIO $ ConnectionClosedException $ "Could not connect to any of the provided brokers: " ++ show (coServers connOpts)
+    connect _ [] = CE.throwIO $ ConnectionClosedException $ "Could not connect to any of the provided brokers: " ++ show (coServers connOpts)
     selectSASLMechanism handle serverMechanisms =
         let serverSaslList = T.split (== ' ') $ E.decodeUtf8 serverMechanisms
             clientMechanisms = coAuth connOpts
