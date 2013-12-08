@@ -11,7 +11,6 @@ import Data.Maybe
 import Data.Text (Text)
 import Data.Typeable
 import Network
-import System.IO
 
 import qualified Control.Exception as CE
 import qualified Data.ByteString as BS
@@ -406,6 +405,17 @@ readFrame handle = do
 writeFrame :: Conn.Connection -> Frame -> IO ()
 writeFrame handle f = do
     Conn.connectionPut handle . BL.toStrict . runPut . put $ f
+
+connectionGet' :: Conn.Connection -> Int -> IO BC.ByteString
+connectionGet' conn x = do
+                  bs <- Conn.connectionGet conn x
+                  let diff = BS.length bs - x
+                  if BS.length bs == 0 || diff == 0
+                    then do
+                      return bs
+                    else do
+                      next <- connectionGet' conn diff
+                      return $ BC.append bs next
 
 ------------------------ CHANNEL -----------------------------
 
