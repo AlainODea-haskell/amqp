@@ -387,12 +387,12 @@ addConnectionClosedHandler conn ifClosed handler = do
 
 readFrame :: Conn.Connection -> IO Frame
 readFrame handle = do
-    strictDat <- Conn.connectionGet handle 7
+    strictDat <- connectionGet' handle 7
     let dat = BL.fromStrict strictDat
     -- NB: userError returns an IOException so it will be catched in 'connectionReceiver'
     when (BL.null dat) $ CE.throwIO $ userError "connection not open"
     let len = fromIntegral $ peekFrameSize dat
-    strictDat' <- Conn.connectionGet handle (len+1) -- +1 for the terminating 0xCE
+    strictDat' <- connectionGet' handle (len+1) -- +1 for the terminating 0xCE
     let dat' = BL.fromStrict strictDat'
     when (BL.null dat') $ CE.throwIO $ userError "connection not open"
     let ret = runGetOrFail get (BL.append dat dat')
