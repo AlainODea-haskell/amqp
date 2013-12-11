@@ -5,30 +5,30 @@ import qualified Data.ByteString.Lazy.Char8 as BL
 
 
 main = do
-    conn <- openSecureConnection "127.0.0.1" "/" "guest" "guest"
+    conn <- openTLSConnection "127.0.0.1" "/" "guest" "guest"
     chan <- openChannel conn
 
-    
+
     --declare queues, exchanges and bindings
     declareQueue chan newQueue {queueName = "myQueueDE"}
     declareQueue chan newQueue {queueName = "myQueueEN"}
-    
+
     declareExchange chan newExchange {exchangeName = "topicExchg", exchangeType = "topic"}
     bindQueue chan "myQueueDE" "topicExchg" "de.*"
     bindQueue chan "myQueueEN" "topicExchg" "en.*"
-    
+
 
     --subscribe to the queues
     consumeMsgs chan "myQueueDE" Ack myCallbackDE
     consumeMsgs chan "myQueueEN" Ack myCallbackEN
-    
-    
+
+
     getLine -- wait for keypress
     closeConnection conn
     putStrLn "connection closed"
 
-    
-    
+
+
 
 myCallbackDE :: (Message,Envelope) -> IO ()
 myCallbackDE (msg, env) = do
