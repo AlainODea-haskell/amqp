@@ -11,6 +11,7 @@ import Data.Maybe
 import Data.Text (Text)
 import Data.Typeable
 import Network
+import System.IO
 
 import qualified Control.Exception as CE
 import qualified Data.ByteString as BS
