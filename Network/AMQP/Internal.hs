@@ -402,21 +402,21 @@ readFrame handle = do
         Right (_, consumedBytes, _) | consumedBytes /= fromIntegral (len+8) ->
             error $ "readFrame: parser should read " ++ show (len+8) ++ " bytes; but read " ++ show consumedBytes
         Right (_, _, frame) -> return frame
+  where
+    connectionGet' :: Conn.Connection -> Int -> IO BC.ByteString
+    connectionGet' conn x = do
+        bs <- Conn.connectionGet conn x
+        let diff = BS.length bs - x
+        if BS.length bs == 0 || diff == 0
+          then do
+            return bs
+          else do
+            next <- connectionGet' conn diff
+            return $ BC.append bs next
 
 writeFrame :: Conn.Connection -> Frame -> IO ()
 writeFrame handle f = do
     Conn.connectionPut handle . BL.toStrict . runPut . put $ f
-
-connectionGet' :: Conn.Connection -> Int -> IO BC.ByteString
-connectionGet' conn x = do
-                  bs <- Conn.connectionGet conn x
-                  let diff = BS.length bs - x
-                  if BS.length bs == 0 || diff == 0
-                    then do
-                      return bs
-                    else do
-                      next <- connectionGet' conn diff
-                      return $ BC.append bs next
 
 ------------------------ CHANNEL -----------------------------
 
