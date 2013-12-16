@@ -52,8 +52,6 @@ module Network.AMQP (
     defaultConnectionOpts,
     openConnection,
     openConnection',
-    openTLSConnection,
-    openTLSConnection',
     openConnection'',
     closeConnection,
     addConnectionClosedHandler,
@@ -526,32 +524,12 @@ defaultConnectionOpts = ConnectionOpts [("localhost", 5672)] "/" [plain "guest" 
 openConnection :: String -> Text -> Text -> Text -> IO Connection
 openConnection host = openConnection' host 5672
 
--- | @openTLSConnection hostname virtualHost loginName loginPassword@ opens a TLS secured connection to an AMQP server running on @hostname@.
--- @virtualHost@ is used as a namespace for AMQP resources (default is \"/\"), so different applications could use multiple virtual hosts on the same AMQP server.
---
--- You must call 'closeConnection' before your program exits to ensure that all published messages are received by the server.
---
--- The @loginName@ and @loginPassword@ will be used to authenticate via the 'PLAIN' SASL mechanism.
---
--- NOTE: If the login name, password or virtual host are invalid, this method will throw a 'ConnectionClosedException'. The exception will not contain a reason why the connection was closed, so you'll have to find out yourself.
-openTLSConnection :: String -> Text -> Text -> Text -> IO Connection
-openTLSConnection host = openTLSConnection' host 5671
-
 -- | same as 'openConnection' but allows you to specify a non-default port-number as the 2nd parameter
 openConnection' :: String -> PortNumber -> Text -> Text -> Text -> IO Connection
 openConnection' host port vhost loginName loginPassword = openConnection'' $ defaultConnectionOpts {
     coServers = [(host, port)],
     coVHost   = vhost,
     coAuth    = [plain loginName loginPassword]
-}
-
--- | same as 'openTLSConnection' but allows you to specify a non-default port-number as the 2nd parameter
-openTLSConnection' :: String -> PortNumber -> Text -> Text -> Text -> IO Connection
-openTLSConnection' host port vhost loginName loginPassword = openConnection'' $ defaultConnectionOpts {
-    coServers = [(host, port)],
-    coVHost   = vhost,
-    coAuth    = [plain loginName loginPassword],
-    coUseTLS  = True
 }
 
 -- | The @PLAIN@ SASL mechanism. See <http://tools.ietf.org/html/rfc4616 RFC4616>

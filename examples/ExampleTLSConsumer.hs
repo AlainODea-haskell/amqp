@@ -5,7 +5,11 @@ import qualified Data.ByteString.Lazy.Char8 as BL
 
 
 main = do
-    conn <- openTLSConnection "127.0.0.1" "/" "guest" "guest"
+    let opts = defaultConnectionOpts {
+            coServers = [("127.0.0.1", 5671)]
+          , coUseTLS = True
+          }
+    conn <- openConnection'' opts
     chan <- openChannel conn
 
 
