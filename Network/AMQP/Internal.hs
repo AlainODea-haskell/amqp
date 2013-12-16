@@ -276,7 +276,7 @@ openConnection'' connOpts = withSocketsDo $ do
             (\(ex :: CE.SomeException) -> do
                 putStrLn $ "Error connecting to "++show (host, port)++": "++show ex
                 connect tlsSettings rest)
-            return
+            (return)
             result
     connect _ [] = CE.throwIO $ ConnectionClosedException $ "Could not connect to any of the provided brokers: " ++ show (coServers connOpts)
     selectSASLMechanism handle serverMechanisms =
