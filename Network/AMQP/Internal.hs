@@ -188,10 +188,7 @@ connectionReceiver conn = do
 -- | Opens a connection to a broker specified by the given 'ConnectionOpts' parameter.
 openConnection'' :: ConnectionOpts -> IO Connection
 openConnection'' connOpts = withSocketsDo $ do
-    let tlsSettings = if coUseTLS connOpts
-                      then Just $ Conn.TLSSettingsSimple True False False
-                      else Nothing
-    handle <- connect tlsSettings $ coServers connOpts
+    handle <- connect $ coServers connOpts
     (maxFrameSize, heartbeatTimeout) <- CE.handle (\(_ :: CE.IOException) -> CE.throwIO $ ConnectionClosedException "Handshake failed. Please check the RabbitMQ logs for more information") $ do
         Conn.connectionPut handle $ BS.append (BC.pack "AMQP")
                 (BS.pack [
@@ -265,7 +262,7 @@ openConnection'' connOpts = withSocketsDo $ do
 
     return conn
   where
-    connect tlsSettings ((host, port) : rest) = do
+    connect ((host, port) : rest) = do
         ctx <- Conn.initConnectionContext
         result <- CE.try (Conn.connectTo ctx $ Conn.ConnectionParams
                               { Conn.connectionHostname  = host
@@ -276,10 +273,13 @@ openConnection'' connOpts = withSocketsDo $ do
         either
             (\(ex :: CE.SomeException) -> do
                 putStrLn $ "Error connecting to "++show (host, port)++": "++show ex
-                connect tlsSettings rest)
+                connect rest)
             (return)
             result
-    connect _ [] = CE.throwIO $ ConnectionClosedException $ "Could not connect to any of the provided brokers: " ++ show (coServers connOpts)
+    connect [] = CE.throwIO $ ConnectionClosedException $ "Could not connect to any of the provided brokers: " ++ show (coServers connOpts)
+    tlsSettings = if coUseTLS connOpts
+                  then Just $ Conn.TLSSettingsSimple True False False
+                  else Nothing
     selectSASLMechanism handle serverMechanisms =
         let serverSaslList = T.split (== ' ') $ E.decodeUtf8 serverMechanisms
             clientMechanisms = coAuth connOpts
