@@ -149,7 +149,7 @@ data ConnectionOpts = ConnectionOpts {
                             coMaxFrameSize :: !(Maybe Word32), -- ^ The maximum frame size to be used. If not specified, no limit is assumed.
                             coHeartbeatDelay :: !(Maybe Word16), -- ^ The delay in seconds, after which the client expects a heartbeat frame from the broker. If 'Nothing', the value suggested by the broker is used. Use @Just 0@ to disable the heartbeat mechnism.
                             coMaxChannel :: !(Maybe Word16), -- ^ The maximum number of channels the client will use.
-                            coUseTLS :: Bool
+                            coUseTLS :: Bool -- ^ Whether or not to connect to the AMQP servers using TLS. See http://www.rabbitmq.com/ssl.html for details and make sure to use a trusted CA or add your own CACert to the trusted certs.
                         }
 
 -- | A 'SASLMechanism' is described by its name ('saslName'), its initial response ('saslInitialResponse'), and an optional function ('saslChallengeFunc') that
@@ -277,7 +277,7 @@ openConnection'' connOpts = withSocketsDo $ do
             result
     connect [] = CE.throwIO $ ConnectionClosedException $ "Could not connect to any of the provided brokers: " ++ show (coServers connOpts)
     tlsSettings = if coUseTLS connOpts
-                  then Just $ Conn.TLSSettingsSimple True False False
+                  then Just $ Conn.TLSSettingsSimple False False False
                   else Nothing
     selectSASLMechanism handle serverMechanisms =
         let serverSaslList = T.split (== ' ') $ E.decodeUtf8 serverMechanisms
