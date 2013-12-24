@@ -7,7 +7,7 @@ import qualified Data.ByteString.Lazy.Char8 as BL
 main = do
     let opts = defaultConnectionOpts {
             coServers = [("127.0.0.1", 5671)]
-          , coUseTLS = True
+          , coTLSSettings = Just TLSTrusted
           }
     conn <- openConnection'' opts
     chan <- openChannel conn
