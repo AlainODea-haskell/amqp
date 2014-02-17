@@ -395,12 +395,12 @@ addConnectionClosedHandler conn ifClosed handler = do
 
 readFrame :: Conn.Connection -> IO Frame
 readFrame handle = do
-    strictDat <- connectionGetExact handle 7
+    strictDat <- userErrorIfFail $ connectionGetExact handle 7
     let dat = toLazy strictDat
     -- NB: userError returns an IOException so it will be catched in 'connectionReceiver'
     when (BL.null dat) $ CE.throwIO $ userError "connection not open"
     let len = fromIntegral $ peekFrameSize dat
-    strictDat' <- connectionGetExact handle (len+1) -- +1 for the terminating 0xCE
+    strictDat' <- userErrorIfFail $ connectionGetExact handle (len+1) -- +1 for the terminating 0xCE
     let dat' = toLazy strictDat'
     when (BL.null dat') $ CE.throwIO $ userError "connection not open"
     let ret = runGetOrFail get (BL.append dat dat')
@@ -409,6 +409,11 @@ readFrame handle = do
         Right (_, consumedBytes, _) | consumedBytes /= fromIntegral (len+8) ->
             error $ "readFrame: parser should read " ++ show (len+8) ++ " bytes; but read " ++ show consumedBytes
         Right (_, _, frame) -> return frame
+  where
+    userErrorIfFail x = CE.catch
+                        x
+                        (\ (_ :: CE.ErrorCall) ->
+                             CE.throwIO $ userError "connection not open")
 
 -- belongs in connection package and will be removed once it lands there
 connectionGetExact :: Conn.Connection -> Int -> IO BS.ByteString
